@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b1220">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="StockAI">
+<link rel="manifest" href="manifest.json">
+<title>StockAI</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f5f7fb;color:#101828;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+header{background:#0b1220;color:#fff;padding:18px 18px 14px;position:sticky;top:0;z-index:5}
+h1{font-size:26px;margin:0}.sub{opacity:.7;font-size:12px;margin-top:4px}
+main{max-width:760px;margin:auto;padding:14px 14px 90px}.card{background:#fff;border-radius:18px;padding:16px;margin:12px 0;box-shadow:0 3px 15px #10182812}
+.tabs{display:flex;gap:7px;overflow:auto;margin:12px 0}.tabs button{border:0;background:#e9edf3;border-radius:12px;padding:9px 14px;white-space:nowrap}.tabs button.on{background:#0b1220;color:#fff}
+.row{display:flex;gap:8px}.row>*{flex:1}input,select,button{font:inherit}input,select{width:100%;padding:12px;border:1px solid #d0d5dd;border-radius:12px;background:#fff}
+.primary{background:#0b1220!important;color:#fff;border:0!important;border-radius:12px;padding:12px 16px}
+.chips{display:flex;gap:7px;overflow:auto;margin-top:10px}.chip{border:1px solid #d0d5dd;background:#fff;border-radius:20px;padding:7px 10px;white-space:nowrap}
+.price{font-size:34px;font-weight:800}.up{color:#16a34a}.down{color:#dc2626}.muted{color:#667085}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.metric{background:#f7f8fa;border-radius:13px;padding:12px}.metric b{font-size:20px;display:block;margin-top:3px}
+.score{font-size:38px;font-weight:850}.bar{height:9px;background:#e4e7ec;border-radius:8px;overflow:hidden}.bar i{display:block;height:100%;background:#0b1220;border-radius:8px}
+canvas{width:100%;height:190px;background:#0b1220;border-radius:14px}
+.item{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #eee}.item:last-child{border:0}
+nav{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #ddd;padding:9px 10px calc(9px + env(safe-area-inset-bottom));display:flex;justify-content:space-around;z-index:9}
+nav button{border:0;background:none;color:#667085}nav button.on{color:#0b1220;font-weight:700}
+.small{font-size:12px}.hide{display:none}
+</style>
+</head>
+<body>
+<header><h1>StockAI</h1><div class="sub">A股 · 港股 · 美股 · 日股 · AI分析</div></header>
+<main>
+<section id="page-analysis">
+<div class="tabs" id="markets"></div>
+<div class="card">
+<div class="row"><input id="symbol" value="AAPL" placeholder="股票代码"><button class="primary" onclick="analyze()">分析</button></div>
+<div class="chips" id="samples"></div>
+</div>
+<div id="result"></div>
+</section>
+
+<section id="page-screen" class="hide">
+<div class="card"><h2>智能选股</h2><p class="muted">按综合评分排序（演示数据）</p><div id="screen"></div></div>
+</section>
+
+<section id="page-watch" class="hide">
+<div class="card"><h2>自选股</h2><div id="watch"></div></div>
+</section>
+
+<section id="page-backtest" class="hide">
+<div class="card"><h2>策略回测</h2><p class="muted">MA20 上穿 MA60 买入，下穿卖出。</p><button class="primary" onclick="backtest()">运行回测</button><div id="bt"></div></div>
+</section>
+</main>
+
+<nav>
+<button class="on" onclick="page('analysis',this)">📊 分析</button>
+<button onclick="page('screen',this)">🔎 选股</button>
+<button onclick="page('watch',this)">⭐ 自选</button>
+<button onclick="page('backtest',this)">🧪 回测</button>
+</nav>
+
+<script>
+const data={
+"A股":[["600519","贵州茅台"],["601318","中国平安"],["600036","招商银行"]],
+"港股":[["0700","腾讯控股"],["9988","阿里巴巴"],["3690","美团"]],
+"美股":[["AAPL","Apple"],["MSFT","Microsoft"],["NVDA","NVIDIA"]],
+"日股":[["7203","丰田汽车"],["6758","索尼集团"],["9984","软银集团"]]
+};
+let market="美股", favorites=JSON.parse(localStorage.getItem("stockai_watch")||"[]");
+const $=id=>document.getElementById(id);
+function init(){
+  $("markets").innerHTML=Object.keys(data).map(m=>`<button class="${m===market?'on':''}" onclick="setMarket('${m}')">${m}</button>`).join("");
+  samples(); watch(); analyze();
+}
+function setMarket(m){market=m;$("markets").innerHTML=Object.keys(data).map(x=>`<button class="${x===market?'on':''}" onclick="setMarket('${x}')">${x}</button>`).join("");samples();$("symbol").value=data[m][0][0];analyze()}
+function samples(){$("samples").innerHTML=data[market].map(x=>`<button class="chip" onclick="pick('${x[0]}')">${x[0]} ${x[1]}</button>`).join("")}
+function pick(s){$("symbol").value=s;analyze()}
+function seed(s){let n=0;for(let c of s)n+=c.charCodeAt(0);let r=[],p=40+n%300;for(let i=0;i<180;i++){p*=1+(Math.sin(i/17+n)*.0008)+(Math.sin(i*2.3+n)*.012);p=Math.max(.5,p);r.push(p)}return r}
+function sma(a,n,i=a.length-1){let x=a.slice(Math.max(0,i-n+1),i+1);return x.reduce((s,v)=>s+v,0)/x.length}
+function rsi(a){let n=14,g=0,l=0;for(let i=a.length-n;i<a.length;i++){let d=a[i]-a[i-1];if(d>0)g+=d;else l-=d}return l?100-100/(1+g/l):100}
+function score(a){let m20=sma(a,20),m60=sma(a,60),rv=rsi(a),s=45+(m20>m60?25:-8)+(rv-50)*.35;return Math.max(0,Math.min(100,s))}
+function draw(a){let c=$("chart"),ctx=c.getContext("2d"),w=c.width=c.clientWidth*2,h=c.height=c.clientHeight*2;ctx.clearRect(0,0,w,h);let mn=Math.min(...a),mx=Math.max(...a);ctx.beginPath();a.forEach((v,i)=>{let x=i/(a.length-1)*w,y=h-(v-mn)/(mx-mn||1)*h*.85-h*.07;i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.lineWidth=5;ctx.strokeStyle="#60a5fa";ctx.stroke()}
+function analyze(){
+ let s=$("symbol").value.trim().toUpperCase();if(!s)return;let a=seed(s),p=a.at(-1),prev=a.at(-2),m20=sma(a,20),m60=sma(a,60),rv=rsi(a),sc=score(a),risk=Math.max(10,Math.min(95,65-(sc-50)*.5));
+ let stop=p*(1-Math.max(.04,risk/1500)),target=p*(1+Math.max(.06,(sc-45)/400)),name=(data[market].find(x=>x[0]===s)||[s,s])[1];
+ $("result").innerHTML=`<div class="card"><div class="muted">${name} · ${s}</div><div class="price">${p.toFixed(2)}</div><div class="${p>=prev?'up':'down'}">${((p/prev-1)*100).toFixed(2)}%</div><canvas id="chart"></canvas></div>
+ <div class="grid"><div class="metric">AI评分<b>${sc.toFixed(1)}</b><div class="bar"><i style="width:${sc}%"></i></div></div><div class="metric">风险<b>${risk.toFixed(1)}</b><div class="bar"><i style="width:${risk}%"></i></div></div></div>
+ <div class="card"><div class="grid"><div class="metric">MA20<b>${m20.toFixed(2)}</b></div><div class="metric">MA60<b>${m60.toFixed(2)}</b></div><div class="metric">RSI<b>${rv.toFixed(1)}</b></div><div class="metric">趋势<b>${m20>m60?'多头':'空头'}</b></div></div></div>
+ <div class="card"><h3>AI分析</h3><p>${name}当前技术面${sc>=70?'偏强':sc>=50?'中性':'偏弱'}。MA20${m20>m60?'高于':'低于'}MA60，RSI为${rv.toFixed(1)}。综合评分 ${sc.toFixed(1)}/100。</p><div class="grid"><div class="metric">参考止损<b>${stop.toFixed(2)}</b></div><div class="metric">参考目标<b>${target.toFixed(2)}</b></div></div><button class="primary" onclick="fav('${s}','${name}')">${favorites.includes(s)?'★ 已加入自选':'☆ 加入自选'}</button><p class="small muted">当前为本地演示行情；接入真实行情 API 后才可用于实时数据。</p></div>`;
+ draw(a.slice(-90));
+}
+function fav(s,n){if(favorites.includes(s))favorites=favorites.filter(x=>x!==s);else favorites.push(s);localStorage.setItem("stockai_watch",JSON.stringify(favorites));watch();analyze()}
+function watch(){$("watch").innerHTML=favorites.length?favorites.map(s=>`<div class="item"><span><b>${s}</b></span><button onclick="pick('${s}');page('analysis',document.querySelector('nav button'))">分析</button></div>`).join(""):"<p class='muted'>还没有自选股。</p>"}
+function screen(){let arr=[];for(let m in data)for(let x of data[m]){let a=seed(x[0]),sc=score(a);arr.push([sc,x[0],x[1],m])}arr.sort((a,b)=>b[0]-a[0]);$("screen").innerHTML=arr.slice(0,12).map((x,i)=>`<div class="item"><span>${i+1}. <b>${x[1]}</b> ${x[2]}<br><small class="muted">${x[3]}</small></span><b>${x[0].toFixed(1)}</b></div>`).join("")}
+function backtest(){let s=$("symbol").value.trim().toUpperCase(),a=seed(s),cash=100000,shares=0,trades=0;for(let i=60;i<a.length;i++){let m20=sma(a,20,i),m60=sma(a,60,i);if(!shares&&m20>m60){shares=cash/a[i];cash=0;trades++}else if(shares&&m20<m60){cash=shares*a[i];shares=0;trades++}}let fin=cash+shares*a.at(-1);$("bt").innerHTML=`<div class="card"><p>标的：<b>${s}</b></p><div class="grid"><div class="metric">初始资金<b>100,000</b></div><div class="metric">期末资产<b>${fin.toFixed(0)}</b></div><div class="metric">策略收益<b>${((fin/100000-1)*100).toFixed(2)}%</b></div><div class="metric">交易次数<b>${trades}</b></div></div></div>`}
+function page(p,el){["analysis","screen","watch","backtest"].forEach(x=>$("page-"+x).classList.toggle("hide",x!==p));document.querySelectorAll("nav button").forEach(b=>b.classList.remove("on"));el.classList.add("on");if(p==="screen")screen();if(p==="watch")watch()}
+init();
+</script>
+</body></html>
